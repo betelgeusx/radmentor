@@ -105,35 +105,36 @@ function mostrarPantalla(nombre) {
  * Devuelve una promesa con { nombre, preguntas } o rechaza con error.
  */
 /**
- * Normaliza una pregunta aceptando múltiples variantes de nombres de campo:
- *   Campo respuesta: "correcta" | "respuesta correcta" | "respuesta_correcta" | "answer" | "correct"
- *   Campo opciones:  "opciones" | "options" | "respuestas"
- *   Campo pregunta:  "pregunta" | "question" | "enunciado"
- * Devuelve siempre { pregunta, opciones, correcta } o null si no se puede normalizar.
+ * Normaliza una pregunta aceptando múltiples variantes de campos.
+ * Soporta:
+ *   - "correcta" / "respuesta correcta" / "respuesta_correcta" / "respuesta" / "answer" / "correct"
+ *   - Valor como número (0,1,2,3) o letra ("A","B","C","D") o texto completo de la opción
+ *   - Opciones con prefijo de letra: "A) ...", "B) ..."
  */
 function normalizarPregunta(p) {
   // ── Campo "pregunta" ──
   const textoPregunta =
-    p.pregunta       ??
-    p.question       ??
-    p.enunciado      ??
+    p.pregunta   ??
+    p.question   ??
+    p.enunciado  ??
     null;
 
   // ── Campo "opciones" ──
   const listaOpciones =
-    p.opciones       ??
-    p.options        ??
-    p.respuestas     ??
+    p.opciones   ??
+    p.options    ??
+    p.respuestas ??
     null;
 
-  // ── Campo "correcta" — acepta número o texto ──
+  // ── Campo "correcta" — múltiples nombres posibles ──
   const rawCorrecta =
-    p.correcta                  ??
-    p['respuesta correcta']     ??
-    p['respuesta_correcta']     ??
-    p.respuestaCorrecta         ??
-    p.answer                    ??
-    p.correct                   ??
+    p.correcta                 ??
+    p['respuesta correcta']    ??
+    p['respuesta_correcta']    ??
+    p.respuestaCorrecta        ??
+    p.respuesta                ??
+    p.answer                   ??
+    p.correct                  ??
     null;
 
   if (
@@ -142,26 +143,41 @@ function normalizarPregunta(p) {
     rawCorrecta === null
   ) return null;
 
-  // Convertir "correcta" a índice numérico si viene como texto
   let indiceCorrecta;
+
   if (typeof rawCorrecta === 'number') {
+    // Ya es índice numérico (0, 1, 2, 3)
     indiceCorrecta = rawCorrecta;
+
   } else if (typeof rawCorrecta === 'string') {
-    // Puede venir como texto de la opción ("1-20 MHz") o como número ("0","1"...)
-    const comoNumero = parseInt(rawCorrecta, 10);
-    if (!isNaN(comoNumero) && String(comoNumero) === rawCorrecta.trim()) {
-      indiceCorrecta = comoNumero;
+    const val = rawCorrecta.trim();
+
+    // Caso 1: es un número en string ("0", "1", "2", "3")
+    const comoNum = parseInt(val, 10);
+    if (!isNaN(comoNum) && String(comoNum) === val) {
+      indiceCorrecta = comoNum;
+
+    // Caso 2: es una letra sola ("A", "B", "C", "D") — mayúscula o minúscula
+    } else if (/^[a-dA-D]$/.test(val)) {
+      indiceCorrecta = val.toUpperCase().charCodeAt(0) - 65; // A=0, B=1, C=2, D=3
+
+    // Caso 3: coincide con el texto exacto de una opción (con o sin prefijo "A) ")
     } else {
-      // Buscar el texto dentro de las opciones
-      indiceCorrecta = listaOpciones.findIndex(
-        o => o.trim().toLowerCase() === rawCorrecta.trim().toLowerCase()
-      );
+      indiceCorrecta = listaOpciones.findIndex(o => {
+        const oLimpia = o.trim().toLowerCase();
+        const vLimpia = val.toLowerCase();
+        return oLimpia === vLimpia ||
+               oLimpia.replace(/^[a-d]\)\s*/i, '') === vLimpia;
+      });
     }
   }
 
-  if (typeof indiceCorrecta !== 'number' || indiceCorrecta < 0 || indiceCorrecta >= listaOpciones.length) {
-    return null;
-  }
+  if (
+    typeof indiceCorrecta !== 'number' ||
+    isNaN(indiceCorrecta)              ||
+    indiceCorrecta < 0                 ||
+    indiceCorrecta >= listaOpciones.length
+  ) return null;
 
   return {
     pregunta: textoPregunta,
