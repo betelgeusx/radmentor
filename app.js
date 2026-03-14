@@ -9,9 +9,10 @@
 // ESTADO
 // ══════════════════════════════════════════════════════════════
 const state = {
-  bancoPreguntasCompleto: [],  // preguntas combinadas de todos los JSON
-  archivosInfo:           [],  // { nombre, cantidad } por archivo cargado
-  preguntasExamen:        [],  // selección aleatoria para el examen actual
+  bancoPreguntasCompleto: [],
+  archivosInfo:           [],
+  preguntasExamen:        [],
+  incorrectasDetalle:     [],  // { pregunta, respuestaCorrecta, fuente }
   indiceActual:           0,
   correctas:              0,
   incorrectas:            0,
@@ -26,6 +27,7 @@ const screens = {
   start:   document.getElementById('screen-start'),
   exam:    document.getElementById('screen-exam'),
   results: document.getElementById('screen-results'),
+  review:  document.getElementById('screen-review'),
 };
 
 const el = {
@@ -62,16 +64,25 @@ const el = {
   btnNext:       document.getElementById('btn-next'),
 
   // Resultados
-  badgeEmoji:      document.getElementById('badge-emoji'),
-  resultsTitle:    document.getElementById('results-title'),
-  resultsSub:      document.getElementById('results-sub'),
-  statCorrectas:   document.getElementById('stat-correctas'),
-  statPct:         document.getElementById('stat-pct'),
-  statIncorrectas: document.getElementById('stat-incorrectas'),
-  gradeBarFill:    document.getElementById('grade-bar-fill'),
-  gradeLabel:      document.getElementById('grade-label'),
-  btnReintentar:   document.getElementById('btn-reintentar'),
-  btnInicio:       document.getElementById('btn-inicio'),
+  badgeEmoji:           document.getElementById('badge-emoji'),
+  resultsTitle:         document.getElementById('results-title'),
+  resultsSub:           document.getElementById('results-sub'),
+  statCorrectas:        document.getElementById('stat-correctas'),
+  statPct:              document.getElementById('stat-pct'),
+  statIncorrectas:      document.getElementById('stat-incorrectas'),
+  gradeBarFill:         document.getElementById('grade-bar-fill'),
+  gradeLabel:           document.getElementById('grade-label'),
+  btnReintentar:        document.getElementById('btn-reintentar'),
+  btnInicio:            document.getElementById('btn-inicio'),
+  btnVerIncorrectas:    document.getElementById('btn-ver-incorrectas'),
+  reviewCountBadge:     document.getElementById('review-count-badge'),
+
+  // Revisión
+  reviewSubtitle:       document.getElementById('review-subtitle'),
+  reviewList:           document.getElementById('review-list'),
+  btnBackResults:       document.getElementById('btn-back-results'),
+  btnReintentarReview:  document.getElementById('btn-reintentar-review'),
+  btnInicioReview:      document.getElementById('btn-inicio-review'),
 };
 
 const LETRAS = ['A', 'B', 'C', 'D'];
@@ -335,11 +346,12 @@ function mezclar(arr) {
 
 function iniciarExamen() {
   const total = Math.min(state.totalExamen, state.bancoPreguntasCompleto.length);
-  state.preguntasExamen = mezclar(state.bancoPreguntasCompleto).slice(0, total);
-  state.indiceActual    = 0;
-  state.correctas       = 0;
-  state.incorrectas     = 0;
-  state.respondida      = false;
+  state.preguntasExamen     = mezclar(state.bancoPreguntasCompleto).slice(0, total);
+  state.indiceActual        = 0;
+  state.correctas           = 0;
+  state.incorrectas         = 0;
+  state.incorrectasDetalle  = [];
+  state.respondida          = false;
 
   actualizarScore();
   mostrarPantalla('exam');
@@ -400,7 +412,14 @@ function seleccionarRespuesta(indiceSeleccionado) {
   const esCorrecta = indiceSeleccionado === correcta;
 
   if (esCorrecta) state.correctas++;
-  else            state.incorrectas++;
+  else {
+    state.incorrectas++;
+    state.incorrectasDetalle.push({
+      pregunta:         pregunta.pregunta,
+      respuestaCorrecta: pregunta.opciones[correcta],
+      fuente:           pregunta._fuente || 'Radiología',
+    });
+  }
 
   const botones = el.optionsGrid.querySelectorAll('.option-btn');
   botones.forEach((btn, i) => {
@@ -478,6 +497,15 @@ function mostrarResultados() {
   el.gradeBarFill.style.background = `linear-gradient(90deg, ${color}, ${color}99)`;
   el.gradeBarFill.style.boxShadow  = `0 0 14px ${color}55`;
 
+  // Botón de revisión — solo si hay incorrectas
+  const numIncorrectas = state.incorrectasDetalle.length;
+  if (numIncorrectas > 0) {
+    el.reviewCountBadge.textContent = numIncorrectas;
+    el.btnVerIncorrectas.classList.remove('hidden');
+  } else {
+    el.btnVerIncorrectas.classList.add('hidden');
+  }
+
   mostrarPantalla('results');
 
   requestAnimationFrame(() => {
@@ -486,7 +514,54 @@ function mostrarResultados() {
 }
 
 // ══════════════════════════════════════════════════════════════
-// BOTONES DE RESULTADOS
+// PANTALLA DE REVISIÓN DE INCORRECTAS
+// ══════════════════════════════════════════════════════════════
+function mostrarRevision() {
+  const lista = state.incorrectasDetalle;
+
+  el.reviewSubtitle.textContent =
+    `${lista.length} pregunta${lista.length !== 1 ? 's' : ''} para repasar`;
+
+  el.reviewList.innerHTML = '';
+
+  lista.forEach((item, i) => {
+    const card = document.createElement('div');
+    card.className = 'review-card';
+    card.style.animationDelay = `${i * 0.05}s`;
+    card.innerHTML = `
+      <div class="review-card-header">
+        <span class="review-card-num">${String(i + 1).padStart(2, '0')}</span>
+        <span class="review-card-fuente">${item.fuente}</span>
+      </div>
+      <p class="review-card-pregunta">${item.pregunta}</p>
+      <div class="review-card-respuesta">
+        <span class="review-respuesta-label">Respuesta correcta</span>
+        <span class="review-respuesta-texto">${item.respuestaCorrecta}</span>
+      </div>
+    `;
+    el.reviewList.appendChild(card);
+  });
+
+  mostrarPantalla('review');
+}
+
+// Botones de la pantalla de revisión
+el.btnVerIncorrectas.addEventListener('click', mostrarRevision);
+
+el.btnBackResults.addEventListener('click', () => mostrarPantalla('results'));
+
+el.btnReintentarReview.addEventListener('click', () => iniciarExamen());
+
+el.btnInicioReview.addEventListener('click', () => {
+  mostrarPantalla('start');
+  const max = state.bancoPreguntasCompleto.length;
+  if (max > 0) {
+    el.numPreguntas.textContent = Math.min(
+      parseInt(el.numPreguntas.textContent), max
+    );
+  }
+});
+
 // ══════════════════════════════════════════════════════════════
 el.btnNext.addEventListener('click', () => {
   if (!state.respondida) return;
