@@ -104,6 +104,72 @@ function mostrarPantalla(nombre) {
  * Lee un File como texto y lo parsea como JSON.
  * Devuelve una promesa con { nombre, preguntas } o rechaza con error.
  */
+/**
+ * Normaliza una pregunta aceptando múltiples variantes de nombres de campo:
+ *   Campo respuesta: "correcta" | "respuesta correcta" | "respuesta_correcta" | "answer" | "correct"
+ *   Campo opciones:  "opciones" | "options" | "respuestas"
+ *   Campo pregunta:  "pregunta" | "question" | "enunciado"
+ * Devuelve siempre { pregunta, opciones, correcta } o null si no se puede normalizar.
+ */
+function normalizarPregunta(p) {
+  // ── Campo "pregunta" ──
+  const textoPregunta =
+    p.pregunta       ??
+    p.question       ??
+    p.enunciado      ??
+    null;
+
+  // ── Campo "opciones" ──
+  const listaOpciones =
+    p.opciones       ??
+    p.options        ??
+    p.respuestas     ??
+    null;
+
+  // ── Campo "correcta" — acepta número o texto ──
+  const rawCorrecta =
+    p.correcta                  ??
+    p['respuesta correcta']     ??
+    p['respuesta_correcta']     ??
+    p.respuestaCorrecta         ??
+    p.answer                    ??
+    p.correct                   ??
+    null;
+
+  if (
+    typeof textoPregunta !== 'string' ||
+    !Array.isArray(listaOpciones)     ||
+    rawCorrecta === null
+  ) return null;
+
+  // Convertir "correcta" a índice numérico si viene como texto
+  let indiceCorrecta;
+  if (typeof rawCorrecta === 'number') {
+    indiceCorrecta = rawCorrecta;
+  } else if (typeof rawCorrecta === 'string') {
+    // Puede venir como texto de la opción ("1-20 MHz") o como número ("0","1"...)
+    const comoNumero = parseInt(rawCorrecta, 10);
+    if (!isNaN(comoNumero) && String(comoNumero) === rawCorrecta.trim()) {
+      indiceCorrecta = comoNumero;
+    } else {
+      // Buscar el texto dentro de las opciones
+      indiceCorrecta = listaOpciones.findIndex(
+        o => o.trim().toLowerCase() === rawCorrecta.trim().toLowerCase()
+      );
+    }
+  }
+
+  if (typeof indiceCorrecta !== 'number' || indiceCorrecta < 0 || indiceCorrecta >= listaOpciones.length) {
+    return null;
+  }
+
+  return {
+    pregunta: textoPregunta,
+    opciones: listaOpciones,
+    correcta: indiceCorrecta,
+  };
+}
+
 function leerArchivoJSON(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -114,20 +180,31 @@ function leerArchivoJSON(file) {
           reject(new Error(`"${file.name}" no contiene un array JSON válido.`));
           return;
         }
-        // Validar que cada pregunta tenga la estructura mínima
-        const invalidas = data.filter(
-          (p, i) => typeof p.pregunta !== 'string' ||
-                    !Array.isArray(p.opciones) ||
-                    typeof p.correcta !== 'number'
-        );
-        if (invalidas.length > 0) {
+
+        // Normalizar cada pregunta
+        const normalizadas = [];
+        const invalidas    = [];
+        data.forEach((p, i) => {
+          const n = normalizarPregunta(p);
+          if (n) normalizadas.push(n);
+          else   invalidas.push(i + 1);
+        });
+
+        if (normalizadas.length === 0) {
           reject(new Error(
-            `"${file.name}" tiene ${invalidas.length} pregunta(s) con formato incorrecto.\n` +
-            `Asegúrate de que cada pregunta tenga: "pregunta", "opciones" y "correcta".`
+            `"${file.name}" no tiene preguntas con formato reconocible.\n` +
+            `Campos aceptados — respuesta: "correcta", "respuesta correcta", "respuesta_correcta"\n` +
+            `Opciones: "opciones", "options", "respuestas"`
           ));
           return;
         }
-        resolve({ nombre: file.name, preguntas: data });
+
+        // Avisar de parciales pero no bloquear
+        if (invalidas.length > 0) {
+          console.warn(`[SimRad] "${file.name}": ${invalidas.length} pregunta(s) omitidas (filas ${invalidas.slice(0,5).join(', ')}${invalidas.length > 5 ? '…' : ''})`);
+        }
+
+        resolve({ nombre: file.name, preguntas: normalizadas });
       } catch (err) {
         reject(new Error(`"${file.name}" no es un JSON válido: ${err.message}`));
       }
