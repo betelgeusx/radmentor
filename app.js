@@ -12,11 +12,11 @@ const state = {
   bancoPreguntasCompleto: [],
   archivosInfo:           [],
   preguntasExamen:        [],
-  incorrectasDetalle:     [],  // { pregunta, respuestaCorrecta, fuente }
+  incorrectasDetalle:     [],
   indiceActual:           0,
   correctas:              0,
   incorrectas:            0,
-  totalExamen:            10,
+  totalExamen:            30,   // siempre 30 preguntas
   respondida:             false,
 };
 
@@ -42,12 +42,7 @@ const el = {
   btnLimpiar:    document.getElementById('btn-limpiar'),
   errorMsg:      document.getElementById('error-msg'),
   configSection: document.getElementById('config-section'),
-
-  // Configuración
-  numPreguntas: document.getElementById('num-preguntas'),
-  btnMenos:     document.getElementById('btn-menos'),
-  btnMas:       document.getElementById('btn-mas'),
-  btnIniciar:   document.getElementById('btn-iniciar'),
+  btnIniciar:    document.getElementById('btn-iniciar'),
 
   // Examen
   scoreDisplay:  document.getElementById('score-display'),
@@ -304,10 +299,6 @@ function actualizarUIBanco() {
   el.filesList.classList.remove('hidden');
   el.bancoTotal.textContent = total;
   el.bancoResumen.classList.remove('hidden');
-
-  // Configurar stepper
-  const valActual = parseInt(el.numPreguntas.textContent);
-  el.numPreguntas.textContent = Math.min(valActual, total);
   el.configSection.classList.remove('hidden');
 
   // Ocultar zona drop si ya hay archivos (reducir espacio)
@@ -394,20 +385,6 @@ el.fileInput.addEventListener('change', (e) => {
 });
 
 // ══════════════════════════════════════════════════════════════
-// STEPPER
-// ══════════════════════════════════════════════════════════════
-el.btnMenos.addEventListener('click', () => {
-  const v = parseInt(el.numPreguntas.textContent);
-  if (v > 1) el.numPreguntas.textContent = v - 1;
-});
-
-el.btnMas.addEventListener('click', () => {
-  const v   = parseInt(el.numPreguntas.textContent);
-  const max = state.bancoPreguntasCompleto.length;
-  if (v < max) el.numPreguntas.textContent = v + 1;
-});
-
-// ══════════════════════════════════════════════════════════════
 // LIMPIAR BANCO
 // ══════════════════════════════════════════════════════════════
 el.btnLimpiar.addEventListener('click', limpiarBanco);
@@ -420,7 +397,6 @@ el.btnIniciar.addEventListener('click', () => {
     mostrarError('Carga al menos un archivo JSON antes de iniciar.');
     return;
   }
-  state.totalExamen = parseInt(el.numPreguntas.textContent);
   iniciarExamen();
 });
 
@@ -647,12 +623,6 @@ el.btnReintentarReview.addEventListener('click', () => iniciarExamen());
 
 el.btnInicioReview.addEventListener('click', () => {
   mostrarPantalla('start');
-  const max = state.bancoPreguntasCompleto.length;
-  if (max > 0) {
-    el.numPreguntas.textContent = Math.min(
-      parseInt(el.numPreguntas.textContent), max
-    );
-  }
 });
 
 // ══════════════════════════════════════════════════════════════
@@ -667,11 +637,4 @@ el.btnReintentar.addEventListener('click', () => {
 
 el.btnInicio.addEventListener('click', () => {
   mostrarPantalla('start');
-  // Sincronizar stepper con banco actual
-  const max = state.bancoPreguntasCompleto.length;
-  if (max > 0) {
-    el.numPreguntas.textContent = Math.min(
-      parseInt(el.numPreguntas.textContent), max
-    );
-  }
 });
